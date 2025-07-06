@@ -1,0 +1,100 @@
+# mute_plugin - 配置文件
+# 群聊禁言管理插件，提供智能禁言功能
+# 配置版本: 0.0.2
+
+# 插件基本信息配置
+[plugin]
+
+# 是否启用插件
+enabled = true
+
+# 配置文件版本
+config_version = "0.0.2"
+
+
+# 组件启用控制
+[components]
+
+# 是否启用智能禁言Action
+enable_smart_mute = true
+
+# 是否启用禁言命令Command
+enable_mute_command = false
+
+
+# 权限管理配置
+[permissions]
+
+# 允许使用禁言命令的用户列表，格式：['platform:user_id']，如['qq:123456789']。空列表表示不启用权限控制
+allowed_users = []
+
+# 允许使用禁言动作的群组列表，格式：['platform:group_id']，如['qq:987654321']。空列表表示不启用权限控制
+allowed_groups = ["qq:1035228475","qq:766798517","qq:1036092828"]
+
+
+# 核心禁言功能配置
+[mute]
+
+# 最短禁言时长（秒）
+min_duration = 60
+
+# 最长禁言时长（秒），默认30天
+max_duration = 2592000
+
+# 默认禁言时长（秒），默认5分钟
+default_duration = 300
+
+# 是否启用人性化的时长显示（如 '5分钟' 而非 '300秒'）
+enable_duration_formatting = true
+
+# 是否记录禁言历史（未来功能）
+log_mute_history = true
+
+# 成功禁言后发送的随机消息模板
+templates = ["好的，禁言 {target} {duration}，理由：{reason}", "收到，对 {target} 执行禁言 {duration}，因为{reason}", "明白了，禁言 {target} {duration}，原因是{reason}", "哇哈哈哈哈哈，已禁言 {target} {duration}，理由：{reason}", "哎呦我去，对 {target} 执行禁言 {duration}，因为{reason}", "{target}，你完蛋了，我要禁言你 {duration} 秒，原因：{reason}"]
+
+# 执行禁言过程中发生错误时发送的随机消息模板
+error_messages = ["没有指定禁言对象呢~", "没有指定禁言时长呢~", "禁言时长必须是正数哦~", "禁言时长必须是数字哦~", "找不到 {target} 这个人呢~", "查找用户信息时出现问题~"]
+
+
+# 智能禁言Action的专属配置
+[smart_mute]
+
+# LLM判定的严格模式
+strict_mode = true
+
+# 关键词激活的敏感度
+# 可选值: low, normal, high
+keyword_sensitivity = "normal"
+
+# 是否允许并行执行（暂未启用）
+allow_parallel = false
+
+
+# 禁言命令Command的专属配置
+[mute_command]
+
+# 最大批量禁言数量（未来功能）
+max_batch_size = 5
+
+# 命令冷却时间（秒）
+cooldown_seconds = 3
+
+
+# 日志记录相关配置
+[logging]
+
+# 日志记录级别
+# 可选值: DEBUG, INFO, WARNING, ERROR
+level = "INFO"
+
+# 日志记录前缀
+prefix = "[MutePlugin]"
+
+# 日志中是否包含用户信息
+include_user_info = true
+
+# 日志中是否包含禁言时长信息
+include_duration_info = true
+
+
