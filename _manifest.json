@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "name": "群聊禁言管理插件 (Mute Plugin)",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "群聊禁言管理插件，提供智能禁言功能",
   "author": {
     "name": "SengokuCola",
@@ -9,7 +9,7 @@
   },
   "license": "GPL-v3.0-or-later",
   "host_application": {
-    "min_version": "0.8.0"
+    "min_version": "0.9.0"
   },
   "keywords": ["mute", "ban", "moderation", "admin", "management", "group"],
   "categories": ["Moderation", "Group Management", "Admin Tools"],

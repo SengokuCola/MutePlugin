@@ -1,6 +1,6 @@
 # mute_plugin - 配置文件
 # 群聊禁言管理插件，提供智能禁言功能
-# 配置版本: 0.0.2
+# 配置版本: 0.1.0
 
 # 插件基本信息配置
 [plugin]
@@ -9,7 +9,7 @@
 enabled = true
 
 # 配置文件版本
-config_version = "0.0.2"
+config_version = "0.1.0"
 
 
 # 组件启用控制
@@ -18,7 +18,7 @@ config_version = "0.0.2"
 # 是否启用智能禁言Action
 enable_smart_mute = true
 
-# 是否启用禁言命令Command
+# 是否启用禁言命令Command（调试用）
 enable_mute_command = false
 
 
@@ -29,7 +29,7 @@ enable_mute_command = false
 allowed_users = []
 
 # 允许使用禁言动作的群组列表，格式：['platform:group_id']，如['qq:987654321']。空列表表示不启用权限控制
-allowed_groups = ["qq:1035228475","qq:766798517","qq:1036092828"]
+allowed_groups = []
 
 
 # 核心禁言功能配置
@@ -60,22 +60,12 @@ error_messages = ["没有指定禁言对象呢~", "没有指定禁言时长呢~"
 # 智能禁言Action的专属配置
 [smart_mute]
 
-# LLM判定的严格模式
-strict_mode = true
-
-# 关键词激活的敏感度
-# 可选值: low, normal, high
-keyword_sensitivity = "normal"
-
 # 是否允许并行执行（暂未启用）
 allow_parallel = false
 
 
 # 禁言命令Command的专属配置
 [mute_command]
-
-# 最大批量禁言数量（未来功能）
-max_batch_size = 5
 
 # 命令冷却时间（秒）
 cooldown_seconds = 3

@@ -20,8 +20,8 @@ from typing import List, Tuple, Type, Optional
 import random
 
 # 导入新插件系统
+from src.plugin_system.apis.plugin_register_api import register_plugin
 from src.plugin_system.base.base_plugin import BasePlugin
-from src.plugin_system.base.base_plugin import register_plugin
 from src.plugin_system.base.base_action import BaseAction
 from src.plugin_system.base.base_command import BaseCommand
 from src.plugin_system.base.component_types import ComponentInfo, ActionActivationType, ChatMode
@@ -41,18 +41,12 @@ class MuteAction(BaseAction):
     """智能禁言Action - 基于LLM智能判断是否需要禁言"""
 
     # 激活设置
-    focus_activation_type = ActionActivationType.LLM_JUDGE  # Focus模式使用LLM判定，确保谨慎
-    normal_activation_type = ActionActivationType.LLM_JUDGE  # Normal模式使用关键词激活，快速响应
-    mode_enable = ChatMode.ALL
+    activation_type = ActionActivationType.LLM_JUDGE  # Focus模式使用LLM判定，确保谨慎
     parallel_action = False
 
     # 动作基本信息
     action_name = "mute"
-    action_description = "智能禁言系统，基于LLM判断是否需要禁言"
-
-    # 关键词设置（用于Normal模式）
-    activation_keywords = ["禁言", "mute", "ban", "silence"]
-    keyword_case_sensitive = False
+    action_description = "使用禁言命令禁言某个用户"
 
     # LLM判定提示词（用于Focus模式）
     llm_judge_prompt = """
@@ -61,30 +55,22 @@ class MuteAction(BaseAction):
 使用禁言的情况：
 1. 用户发送明显违规内容（色情、暴力、政治敏感等）
 2. 恶意刷屏或垃圾信息轰炸
-3. 用户主动明确要求被禁言（"禁言我"等）
-4. 严重违反群规的行为
-5. 恶意攻击他人或群组管理
-
-绝对不要使用的情况：
-2. 情绪化表达但无恶意
-3. 开玩笑或调侃，除非过分
-4. 单纯的意见分歧或争论
-
+3. 用户主动明确要求自己被禁言（"禁言我"等）
+4. 恶意攻击他人或群组管理，例如辱骂他人，要求禁言他人
 """
 
     # 动作参数定义
     action_parameters = {
-        "target": "禁言对象，必填，输入你要禁言的对象的名字，请仔细思考不要弄错禁言对象",
-        "duration": "禁言时长，必填，输入你要禁言的时长（秒），单位为秒，必须为数字",
-        "reason": "禁言理由，可选",
+        "target": "禁言对象，必填，输入你要禁言的对象的名字，不要弄错禁言对象",
+        "duration": "禁言时长，必填，输入你要禁言的时长，时长视严重程度而定（秒），单位为秒，必须为数字"
     }
 
     # 动作使用场景
     action_require = [
-        "当有人违反了公序良俗的内容",
-        "当有人刷屏时使用",
-        "当有人发了擦边，或者色情内容时使用",
-        "当有人要求禁言自己时使用",
+        "当有人违反了公序良俗的内容（色情、暴力、政治敏感等）（非常严重）",
+        "当有人刷屏时使用（轻微严重）",
+        "用户主动明确要求自己被禁言（随意）",
+        "恶意攻击他人或群组管理，例如辱骂他人，要求禁言他人（严重）",
         "如果某人已经被禁言了，就不要再次禁言了，除非你想追加时间！！",
     ]
 
@@ -455,6 +441,9 @@ class MutePlugin(BasePlugin):
     plugin_name = "mute_plugin"  # 内部标识符
     enable_plugin = True
     config_file_name = "config.toml"
+    
+    dependencies = []
+    python_dependencies = []
 
     # 配置节描述
     config_section_descriptions = {
@@ -471,7 +460,7 @@ class MutePlugin(BasePlugin):
     config_schema = {
         "plugin": {
             "enabled": ConfigField(type=bool, default=False, description="是否启用插件"),
-            "config_version": ConfigField(type=str, default="0.0.2", description="配置文件版本"),
+            "config_version": ConfigField(type=str, default="0.1.0", description="配置文件版本"),
         },
         "components": {
             "enable_smart_mute": ConfigField(type=bool, default=True, description="是否启用智能禁言Action"),
@@ -525,14 +514,9 @@ class MutePlugin(BasePlugin):
             ),
         },
         "smart_mute": {
-            "strict_mode": ConfigField(type=bool, default=True, description="LLM判定的严格模式"),
-            "keyword_sensitivity": ConfigField(
-                type=str, default="normal", description="关键词激活的敏感度", choices=["low", "normal", "high"]
-            ),
             "allow_parallel": ConfigField(type=bool, default=False, description="是否允许并行执行（暂未启用）"),
         },
         "mute_command": {
-            "max_batch_size": ConfigField(type=int, default=5, description="最大批量禁言数量（未来功能）"),
             "cooldown_seconds": ConfigField(type=int, default=3, description="命令冷却时间（秒）"),
         },
         "logging": {
