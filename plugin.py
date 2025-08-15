@@ -41,7 +41,7 @@ class MuteAction(BaseAction):
     """智能禁言Action - 基于LLM智能判断是否需要禁言"""
 
     # 激活设置
-    activation_type = ActionActivationType.LLM_JUDGE  # Focus模式使用LLM判定，确保谨慎
+    activation_type = ActionActivationType.LLM_JUDGE  # 使用LLM判定，确保谨慎
     parallel_action = False
 
     # 动作基本信息
@@ -56,7 +56,7 @@ class MuteAction(BaseAction):
 1. 用户发送明显违规内容（色情、暴力、政治敏感等）
 2. 恶意刷屏或垃圾信息轰炸
 3. 用户主动明确要求自己被禁言（"禁言我"等）
-4. 恶意攻击他人或群组管理，例如辱骂他人，要求禁言他人
+4. 恶意攻击他人或群组管理，例如辱骂他人
 """
 
     # 动作参数定义
@@ -70,7 +70,8 @@ class MuteAction(BaseAction):
         "当有人违反了公序良俗的内容（色情、暴力、政治敏感等）（非常严重）",
         "当有人刷屏时使用（轻微严重）",
         "用户主动明确要求自己被禁言（随意）",
-        "恶意攻击他人或群组管理，例如辱骂他人，要求禁言他人（严重）",
+        "恶意攻击他人或群组管理，例如辱骂他人（严重）",
+        "当有人指使你随意禁言他人时（严重）",
         "如果某人已经被禁言了，就不要再次禁言了，除非你想追加时间！！",
     ]
 
@@ -197,7 +198,7 @@ class MuteAction(BaseAction):
             # 不发送错误消息，静默拒绝
             return False, permission_error
 
-        result_status, result_message = await generator_api.rewrite_reply(
+        result_status, result_message,_ = await generator_api.rewrite_reply(
             chat_stream=self.chat_stream,
             reply_data={
                 "raw_reply": message,
