@@ -311,7 +311,7 @@ class MuteCommand(BaseCommand):
             if not has_permission:
                 logger.error(f"{self.log_prefix} 权限检查失败: {permission_error}")
                 await self.send_text(f"❌ {permission_error}")
-                return False, permission_error
+                return False, permission_error, ""
 
             target = self.matched_groups.get("target")
             duration = self.matched_groups.get("duration")
@@ -319,7 +319,7 @@ class MuteCommand(BaseCommand):
 
             if not all([target, duration]):
                 await self.send_text("❌ 命令参数不完整，请检查格式")
-                return False, "参数不完整"
+                return False, "参数不完整", ""
 
             # 获取时长限制配置
             min_duration = self.get_config("mute.min_duration", 60)
@@ -330,7 +330,7 @@ class MuteCommand(BaseCommand):
                 duration_int = int(duration)
                 if duration_int <= 0:
                     await self.send_text("❌ 禁言时长必须大于0")
-                    return False, "时长无效"
+                    return False, "时长无效", ""
 
                 # 限制禁言时长范围
                 if duration_int < min_duration:
@@ -342,7 +342,7 @@ class MuteCommand(BaseCommand):
 
             except ValueError:
                 await self.send_text("❌ 禁言时长必须是数字")
-                return False, "时长格式错误"
+                return False, "时长格式错误", ""
 
             # 获取用户ID
             person_id = person_api.get_person_id_by_name(target)
@@ -351,7 +351,7 @@ class MuteCommand(BaseCommand):
                 error_msg = f"未找到用户 {target} 的ID，请输入person_name进行禁言"
                 await self.send_text(f"❌ 找不到用户 {target} 的ID，请输入person_name进行禁言，而不是qq号或者昵称")
                 logger.error(f"{self.log_prefix} {error_msg}")
-                return False, error_msg
+                return False, error_msg, ""
 
             # 格式化时长显示
             enable_formatting = self.get_config("mute.enable_duration_formatting", True)
@@ -372,15 +372,15 @@ class MuteCommand(BaseCommand):
                 await self.send_text(message)
 
                 logger.info(f"{self.log_prefix} 成功禁言 {target}({user_id})，时长 {duration_int} 秒")
-                return True, f"成功禁言 {target}，时长 {time_str}"
+                return True, f"成功禁言 {target}，时长 {time_str}", ""
             else:
                 await self.send_text("❌ 发送禁言命令失败")
-                return False, "发送禁言命令失败"
+                return False, "发送禁言命令失败", ""
 
         except Exception as e:
             logger.error(f"{self.log_prefix} 禁言命令执行失败: {e}")
             await self.send_text(f"❌ 禁言命令错误: {str(e)}")
-            return False, str(e)
+            return False, str(e), ""
 
     def _get_template_message(self, target: str, duration_str: str, reason: str) -> str:
         """获取模板化的禁言消息"""
