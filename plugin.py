@@ -48,17 +48,6 @@ class MuteAction(BaseAction):
     action_name = "mute"
     action_description = "使用禁言命令禁言某个用户"
 
-    # LLM判定提示词（用于Focus模式）
-    llm_judge_prompt = """
-判定是否需要使用禁言动作的严格条件：
-
-使用禁言的情况：
-1. 用户发送明显违规内容（色情、暴力、政治敏感等）
-2. 恶意刷屏或垃圾信息轰炸
-3. 用户主动明确要求自己被禁言（"禁言我"等）
-4. 恶意攻击他人或群组管理，例如辱骂他人
-"""
-
     # 动作参数定义
     action_parameters = {
         "target": "禁言对象，必填，输入你要禁言的对象的名字，不要弄错禁言对象",
@@ -176,18 +165,19 @@ class MuteAction(BaseAction):
 
         if not has_permission:
             logger.warning(f"{self.log_prefix} 权限检查失败: {permission_error}")
-            result_status, result_message = await generator_api.rewrite_reply(
+            result_status, llm_response = await generator_api.rewrite_reply(
                 chat_stream=self.chat_stream,
                 reply_data={
                     "raw_reply": "我想禁言{target}，但是我没有权限",
                     "reason": "表达自己没有在这个群禁言的能力",
                 },
             )
+            
 
             if result_status:
-                for reply_seg in result_message:
-                    data = reply_seg[1]
-                    await self.send_text(data)
+                for reply_seg in llm_response.reply_set:
+                    send_data = reply_seg[1]
+                    await self.send_text(send_data)
 
             await self.store_action_info(
                 action_build_into_prompt=True,
@@ -198,18 +188,18 @@ class MuteAction(BaseAction):
             # 不发送错误消息，静默拒绝
             return False, permission_error
 
-        result_status, result_message,_ = await generator_api.rewrite_reply(
+        result_status, data = await generator_api.rewrite_reply(
             chat_stream=self.chat_stream,
             reply_data={
                 "raw_reply": message,
                 "reason": reason,
             },
         )
-
+        
         if result_status:
-            for reply_seg in result_message:
-                data = reply_seg[1]
-                await self.send_text(data)
+            for reply_seg in data.reply_set:
+                send_data = reply_seg[1]
+                await self.send_text(send_data)
 
         # 发送群聊禁言命令
         success = await self.send_command(
