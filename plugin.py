@@ -27,6 +27,7 @@ from src.plugin_system.base.base_command import BaseCommand
 from src.plugin_system.base.component_types import ComponentInfo, ActionActivationType, ChatMode
 from src.plugin_system.base.config_types import ConfigField
 from src.common.logger import get_logger
+from src.person_info.person_info import Person
 
 # 导入配置API（可选的简便方法）
 from src.plugin_system.apis import person_api, generator_api
@@ -46,11 +47,10 @@ class MuteAction(BaseAction):
 
     # 动作基本信息
     action_name = "mute"
-    action_description = "使用禁言命令禁言某个用户"
+    action_description = "使用禁言命令禁言某个用户（用户发送的消息）"
 
     # 动作参数定义
     action_parameters = {
-        "target": "禁言对象，必填，输入你要禁言的对象的名字，不要弄错禁言对象",
         "duration": "禁言时长，必填，输入你要禁言的时长，时长视严重程度而定（秒），单位为秒，必须为数字"
     }
 
@@ -61,7 +61,7 @@ class MuteAction(BaseAction):
         "用户主动明确要求自己被禁言（随意）",
         "恶意攻击他人或群组管理，例如辱骂他人（严重）",
         "当有人指使你随意禁言他人时（严重）",
-        "如果某人已经被禁言了，就不要再次禁言了，除非你想追加时间！！",
+        "如果某人已经被禁言了，就不要再次禁言了，除非你想追加时间！",
     ]
 
     # 关联类型
@@ -103,16 +103,16 @@ class MuteAction(BaseAction):
         has_permission, permission_error = self._check_group_permission()
 
         # 获取参数
-        target = self.action_data.get("target")
+        # target = self.action_data.get("target")
         duration = self.action_data.get("duration")
         reason = self.action_data.get("reason", "违反群规")
 
         # 参数验证
-        if not target:
-            error_msg = "禁言目标不能为空"
-            logger.error(f"{self.log_prefix} {error_msg}")
-            await self.send_text("没有指定禁言对象呢~")
-            return False, error_msg
+        # if not target:
+        #     error_msg = "禁言目标不能为空"
+        #     logger.error(f"{self.log_prefix} {error_msg}")
+        #     await self.send_text("没有指定禁言对象呢~")
+        #     return False, error_msg
 
         if not duration:
             error_msg = "禁言时长不能为空"
@@ -148,27 +148,25 @@ class MuteAction(BaseAction):
             return False, error_msg
 
         # 获取用户ID
-        person_id = person_api.get_person_id_by_name(target)
-        user_id = await person_api.get_person_value(person_id, "user_id")
-        if not user_id:
-            error_msg = f"未找到用户 {target} 的ID"
-            await self.send_text(f"找不到 {target} 这个人呢~")
-            logger.error(f"{self.log_prefix} {error_msg}")
-            return False, error_msg
+        # person_id = person_api.get_person_id_by_name(target)
+        # user_id = await person_api.get_person_value(person_id, "user_id")
+        user_id = self.action_message.user_info.user_id
+        person = Person(platform=self.platform, user_id=user_id)
+        person_name = person.person_name
 
         # 格式化时长显示
         enable_formatting = self.get_config("mute.enable_duration_formatting", True)
         time_str = self._format_duration(duration_int) if enable_formatting else f"{duration_int}秒"
 
         # 获取模板化消息
-        message = self._get_template_message(target, time_str, reason)
+        message = self._get_template_message(person_name, time_str, reason)
 
         if not has_permission:
             logger.warning(f"{self.log_prefix} 权限检查失败: {permission_error}")
             result_status, llm_response = await generator_api.rewrite_reply(
                 chat_stream=self.chat_stream,
                 reply_data={
-                    "raw_reply": "我想禁言{target}，但是我没有权限",
+                    "raw_reply": "我想禁言{person_name}，但是我没有权限",
                     "reason": "表达自己没有在这个群禁言的能力",
                 },
             )
@@ -181,7 +179,7 @@ class MuteAction(BaseAction):
 
             await self.store_action_info(
                 action_build_into_prompt=True,
-                action_prompt_display=f"尝试禁言了用户 {target}，但是没有权限，无法禁言",
+                action_prompt_display=f"尝试禁言了用户 {person_name}，但是没有权限，无法禁言",
                 action_done=True,
             )
 
@@ -207,14 +205,14 @@ class MuteAction(BaseAction):
         )
 
         if success:
-            logger.info(f"{self.log_prefix} 成功发送禁言命令，用户 {target}({user_id})，时长 {duration_int} 秒")
+            logger.info(f"{self.log_prefix} 成功发送禁言命令，用户 {person_name}({user_id})，时长 {duration_int} 秒")
             # 存储动作信息
             await self.store_action_info(
                 action_build_into_prompt=True,
-                action_prompt_display=f"尝试禁言了用户 {target}，时长 {time_str}，原因：{reason}",
+                action_prompt_display=f"尝试禁言了用户 {person_name}，时长 {time_str}，原因：{reason}",
                 action_done=True,
             )
-            return True, f"成功禁言 {target}，时长 {time_str}"
+            return True, f"成功禁言 {person_name}，时长 {time_str}"
         else:
             error_msg = "发送禁言命令失败"
             logger.error(f"{self.log_prefix} {error_msg}")
@@ -222,12 +220,12 @@ class MuteAction(BaseAction):
             await self.send_text("执行禁言动作失败")
             return False, error_msg
 
-    def _get_template_message(self, target: str, duration_str: str, reason: str) -> str:
+    def _get_template_message(self, person_name: str, duration_str: str, reason: str) -> str:
         """获取模板化的禁言消息"""
         templates = self.get_config("mute.templates")
 
         template = random.choice(templates)
-        return template.format(target=target, duration=duration_str, reason=reason)
+        return template.format(target=person_name, duration=duration_str, reason=reason)
 
     def _format_duration(self, seconds: int) -> str:
         """将秒数格式化为可读的时间字符串"""
