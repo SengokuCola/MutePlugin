@@ -10,6 +10,7 @@
 - 参数验证：完整的输入参数验证和错误处理
 - 配置文件支持：所有设置可通过配置文件调整
 - 权限管理：支持用户权限和群组权限控制
+- 多种格式支持：支持QQ号、@格式、person_name等多种用户标识
 
 包含组件：
 - 智能禁言Action - 基于LLM判断是否需要禁言（支持群组权限控制）
@@ -18,6 +19,7 @@
 
 from typing import List, Tuple, Type, Optional
 import random
+import re
 
 # 导入新插件系统
 from src.plugin_system.apis.plugin_register_api import register_plugin
@@ -36,7 +38,6 @@ logger = get_logger("mute_plugin")
 
 
 # ===== Action组件 =====
-
 
 class MuteAction(BaseAction):
     """智能禁言Action - 基于LLM智能判断是否需要禁言"""
@@ -57,6 +58,8 @@ class MuteAction(BaseAction):
     # 动作使用场景
     action_require = [
         "当有人违反了公序良俗的内容（色情、暴力、政治敏感等）（非常严重）",
+        "当有人发布垃圾广告或恶意链接时（严重）",
+        "当有人发送关于快手的内容，有快手两个字都不行，需要禁言1天（非常严重）",
         "当有人刷屏时使用（轻微严重）",
         "用户主动明确要求自己被禁言（随意）",
         "恶意攻击他人或群组管理，例如辱骂他人（严重）",
@@ -207,7 +210,6 @@ class MuteAction(BaseAction):
                 },
             )
             
-
             if result_status:
                 for reply_seg in data.reply_set.reply_data:
                     send_data = reply_seg.content
@@ -292,7 +294,6 @@ class MuteAction(BaseAction):
 
 # ===== Command组件 =====
 
-
 class MuteCommand(BaseCommand):
     """禁言命令 - 手动执行禁言操作"""
 
@@ -300,10 +301,54 @@ class MuteCommand(BaseCommand):
     command_name = "mute_command"
     command_description = "禁言命令，手动执行禁言操作"
 
+    # 修改正则表达式，支持 @用户 格式和QQ号格式
     command_pattern = r"^/mute\s+(?P<target>\S+)\s+(?P<duration>\d+)(?:\s+(?P<reason>.+))?$"
-    command_help = "禁言指定用户，用法：/mute <用户名> <时长(秒)> [理由]"
-    command_examples = ["/mute 用户名 300", "/mute 张三 600 刷屏", "/mute @某人 1800 违规内容"]
+    command_help = "禁言指定用户，用法：/mute <用户名/QQ号/@用户> <时长(秒)> [理由]"
+    command_examples = [
+        "/mute 柯梦 300", 
+        "/mute 1804829501 600 刷屏", 
+        "/mute @<柯梦:1804829501> 1800 违规内容",
+        "/mute @柯梦 300"
+    ]
     intercept_message = True  # 拦截消息处理
+
+    def _parse_target(self, target: str) -> Tuple[Optional[str], Optional[str]]:
+        """解析目标用户，支持多种格式
+        
+        Args:
+            target: 目标字符串，可以是：
+                  1. QQ号: "1804829501"
+                  2. @格式: "@<柯梦:1804829501>"
+                  3. 纯@: "@柯梦"
+                  4. Person名: "柯梦"
+        
+        Returns:
+            Tuple[Optional[str], Optional[str]]: (user_id, display_name)
+        """
+        
+        # 如果是QQ号格式（纯数字）
+        if target.isdigit():
+            logger.info(f"{self.log_prefix} 识别为QQ号格式: {target}")
+            return target, target
+        
+        # 如果是 @<name:qq> 格式
+        match = re.match(r"@?<([^:]+):(\d+)>", target)
+        if match:
+            display_name = match.group(1)
+            user_id = match.group(2)
+            logger.info(f"{self.log_prefix} 识别为@格式: {display_name}:{user_id}")
+            return user_id, display_name
+        
+        # 如果是 @name 格式
+        if target.startswith("@"):
+            display_name = target[1:]
+            logger.info(f"{self.log_prefix} 识别为纯@格式: {display_name}")
+            # 这里先返回None，后面通过display_name查找user_id
+            return None, display_name
+        
+        # 其他情况视为person_name
+        logger.info(f"{self.log_prefix} 识别为person_name格式: {target}")
+        return None, target
 
     def _check_admin_permission(self, user_id: str, platform: str) -> Tuple[bool, Optional[str]]:
         """检查目标用户是否为管理员
@@ -363,7 +408,36 @@ class MuteCommand(BaseCommand):
         logger.warning(f"{self.log_prefix} 用户 {current_user_key} 没有禁言命令权限")
         return False, "你没有使用禁言命令的权限"
 
-    async def execute(self) -> Tuple[bool, Optional[str]]:
+    async def _get_user_id_by_person_name(self, person_name: str) -> Optional[str]:
+        """通过person_name获取user_id
+        
+        Args:
+            person_name: 人物名称
+            
+        Returns:
+            user_id 或 None
+        """
+        try:
+            # 首先尝试通过person_name获取person_id
+            person_id = person_api.get_person_id_by_name(person_name)
+            if not person_id or person_id == "unknown":
+                logger.warning(f"{self.log_prefix} 未找到person_name为 {person_name} 的person_id")
+                return None
+            
+            # 通过person_id获取user_id
+            user_id = await person_api.get_person_value(person_id, "user_id")
+            if not user_id or user_id == "unknown":
+                logger.warning(f"{self.log_prefix} 未找到person_id为 {person_id} 的user_id")
+                return None
+            
+            logger.info(f"{self.log_prefix} 通过person_name {person_name} 找到user_id: {user_id}")
+            return str(user_id)
+            
+        except Exception as e:
+            logger.error(f"{self.log_prefix} 获取user_id失败: {e}")
+            return None
+
+    async def execute(self) -> Tuple[bool, Optional[str], Optional[str]]:
         """执行禁言命令"""
         try:
             # 首先检查用户权限
@@ -380,6 +454,29 @@ class MuteCommand(BaseCommand):
             if not all([target, duration]):
                 await self.send_text("❌ 命令参数不完整，请检查格式")
                 return False, "参数不完整", ""
+
+            # 解析目标用户
+            user_id, display_name = self._parse_target(target)
+            
+            # 如果通过@格式直接获取到了user_id，直接使用
+            if user_id:
+                target_user_id = user_id
+                target_display_name = display_name or target_user_id
+                logger.info(f"{self.log_prefix} 直接获取到user_id: {target_user_id}")
+            else:
+                # 否则需要通过display_name查找user_id
+                if not display_name:
+                    await self.send_text("❌ 无法识别用户格式，请使用QQ号、@用户或person_name")
+                    return False, "用户格式错误", ""
+                
+                # 通过person_name查找user_id
+                target_user_id = await self._get_user_id_by_person_name(display_name)
+                if not target_user_id:
+                    await self.send_text(f"❌ 找不到用户 {display_name}，请确认用户是否存在")
+                    return False, f"找不到用户 {display_name}", ""
+                
+                target_display_name = display_name
+                logger.info(f"{self.log_prefix} 通过person_name {display_name} 找到user_id: {target_user_id}")
 
             # 获取时长限制配置
             min_duration = self.get_config("mute.min_duration", 60)
@@ -404,41 +501,32 @@ class MuteCommand(BaseCommand):
                 await self.send_text("❌ 禁言时长必须是数字")
                 return False, "时长格式错误", ""
 
-            # 获取用户ID
-            person_id = person_api.get_person_id_by_name(target)
-            user_id = await person_api.get_person_value(person_id, "user_id")
-            if not user_id or user_id == "unknown":
-                error_msg = f"未找到用户 {target} 的ID，请输入person_name进行禁言"
-                await self.send_text(f"❌ 找不到用户 {target} 的ID，请输入person_name进行禁言，而不是qq号或者昵称")
-                logger.error(f"{self.log_prefix} {error_msg}")
-                return False, error_msg, ""
-
             # 检查是否为管理员
-            is_admin, admin_error = self._check_admin_permission(user_id, self.message.chat_stream.platform)
+            is_admin, admin_error = self._check_admin_permission(target_user_id, self.message.chat_stream.platform)
             if is_admin:
                 await self.send_text(f"❌ {admin_error}")
-                logger.warning(f"{self.log_prefix} 尝试禁言管理员 {target}({user_id})，已被拒绝")
+                logger.warning(f"{self.log_prefix} 尝试禁言管理员 {target_display_name}({target_user_id})，已被拒绝")
                 return False, admin_error, ""
 
             # 格式化时长显示
             time_str = self._format_duration(duration_int)
 
-            logger.info(f"{self.log_prefix} 执行禁言命令: {target}({user_id}) -> {time_str}")
+            logger.info(f"{self.log_prefix} 执行禁言命令: {target_display_name}({target_user_id}) -> {time_str}")
 
             # 发送群聊禁言命令
             success = await self.send_command(
                 command_name="GROUP_BAN",
-                args={"qq_id": str(user_id), "duration": str(duration_int)},
-                display_message=f"禁言了 {target} {time_str}",
+                args={"qq_id": str(target_user_id), "duration": str(duration_int)},
+                display_message=f"禁言了 {target_display_name} {time_str}",
             )
 
             if success:
                 # 获取并发送模板化消息
-                message = self._get_template_message(target, time_str, reason)
+                message = self._get_template_message(target_display_name, time_str, reason)
                 await self.send_text(message)
 
-                logger.info(f"{self.log_prefix} 成功禁言 {target}({user_id})，时长 {duration_int} 秒")
-                return True, f"成功禁言 {target}，时长 {time_str}", ""
+                logger.info(f"{self.log_prefix} 成功禁言 {target_display_name}({target_user_id})，时长 {duration_int} 秒")
+                return True, f"成功禁言 {target_display_name}，时长 {time_str}", ""
             else:
                 await self.send_text("❌ 发送禁言命令失败")
                 return False, "发送禁言命令失败", ""
@@ -451,7 +539,6 @@ class MuteCommand(BaseCommand):
     def _get_template_message(self, target: str, duration_str: str, reason: str) -> str:
         """获取模板化的禁言消息"""
         templates = self.get_config("mute.templates")
-
         template = random.choice(templates)
         return template.format(target=target, duration=duration_str, reason=reason)
 
@@ -483,7 +570,6 @@ class MuteCommand(BaseCommand):
 
 
 # ===== 插件主类 =====
-
 
 @register_plugin
 class MutePlugin(BasePlugin):

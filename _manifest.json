@@ -13,8 +13,20 @@
   },
   "homepage_url": "https://github.com/SengokuCola",
   "repository_url": "https://github.com/SengokuCola/MutePlugin",
-  "keywords": ["mute", "ban", "moderation", "admin", "management", "group"],
-  "categories": ["Moderation", "Group Management", "Admin Tools"],
+  "keywords": [
+    "mute",
+    "ban",
+    "moderation",
+    "admin",
+    "management",
+    "group"
+  ],
+  "categories": [
+    "Moderation",
+    "Group Management",
+    "Admin Tools"
+  ],
   "default_locale": "zh-CN",
-  "locales_path": "_locales"
+  "locales_path": "_locales",
+  "id": "SengokuCola.Mute-Plugin"
 }
