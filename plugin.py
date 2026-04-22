@@ -217,6 +217,9 @@ class MutePlugin(MaiBotPlugin):
     async def on_load(self) -> None:
         """处理插件加载。"""
 
+    async def on_unload(self) -> None:
+        """处理插件卸载。"""
+
     async def on_config_update(self, scope: str, config_data: Dict[str, object], version: str) -> None:
         """处理配置热更新。"""
 
@@ -335,10 +338,13 @@ class MutePlugin(MaiBotPlugin):
         )
         if not isinstance(lookup_result, dict):
             raise RuntimeError("message.get_by_id 返回格式异常")
-        if lookup_result.get("success") is False:
-            raise RuntimeError(str(lookup_result.get("error") or "message.get_by_id 查询失败"))
+        capability_result = _extract_nested_mapping(lookup_result)
+        if lookup_result.get("success") is False or capability_result.get("success") is False:
+            return None, None, str(
+                capability_result.get("error") or lookup_result.get("error") or "message.get_by_id 查询失败"
+            )
 
-        target_message = lookup_result.get("message")
+        target_message = capability_result.get("message")
         if target_message is None:
             return None, None, f"未找到消息 ID 为 {normalized_msg_id} 的消息"
         if not isinstance(target_message, dict):
