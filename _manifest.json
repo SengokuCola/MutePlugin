@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "version": "4.4.0",
+  "version": "4.5.0",
   "name": "群聊禁言管理插件 (Mute Plugin)",
   "description": "群聊禁言管理插件，提供智能禁言和手动禁言命令",
   "author": {
@@ -25,6 +25,7 @@
   "dependencies": [],
   "capabilities": [
     "api.call",
+    "message.get_by_id",
     "person.get_id_by_name",
     "person.get_value",
     "send.text"

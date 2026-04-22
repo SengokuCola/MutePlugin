@@ -45,6 +45,27 @@ def _extract_nested_capability_value(payload: Any, expected_key: str) -> Any:
     return payload
 
 
+def _extract_nested_mapping(payload: Any) -> Dict[str, Any]:
+    """从 capability / API 返回值中剥离常见包装层，取出业务字典。"""
+
+    current = payload
+    visited: set[int] = set()
+    while isinstance(current, dict):
+        current_id = id(current)
+        if current_id in visited:
+            break
+        visited.add(current_id)
+
+        for wrapper_key in ("result", "data"):
+            nested_value = current.get(wrapper_key)
+            if isinstance(nested_value, dict):
+                current = nested_value
+                break
+        else:
+            return current
+    return {}
+
+
 def _normalize_platform_user_id(payload: Any) -> str:
     """从 capability 返回值中提取最终可用的平台用户 ID。"""
 
@@ -297,6 +318,47 @@ class MutePlugin(MaiBotPlugin):
             return None, self.config.mute.error_messages[5]
         return normalized_user_id, None
 
+    async def _resolve_message_sender(self, stream_id: str, msg_id: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """根据消息 ID 查询消息，并返回发送者用户 ID 与展示名。"""
+
+        normalized_stream_id = str(stream_id or "").strip()
+        normalized_msg_id = str(msg_id or "").strip()
+        if not normalized_msg_id:
+            return None, None, "缺少目标消息 ID"
+        if not normalized_stream_id:
+            return None, None, "缺少当前会话 stream_id，无法按消息 ID 查询目标"
+
+        lookup_result = await self.ctx.call_capability(
+            "message.get_by_id",
+            message_id=normalized_msg_id,
+            chat_id=normalized_stream_id,
+        )
+        if not isinstance(lookup_result, dict):
+            raise RuntimeError("message.get_by_id 返回格式异常")
+        if lookup_result.get("success") is False:
+            raise RuntimeError(str(lookup_result.get("error") or "message.get_by_id 查询失败"))
+
+        target_message = lookup_result.get("message")
+        if target_message is None:
+            return None, None, f"未找到消息 ID 为 {normalized_msg_id} 的消息"
+        if not isinstance(target_message, dict):
+            raise RuntimeError("message.get_by_id 返回的 message 字段格式异常")
+
+        message_info = target_message.get("message_info")
+        user_info = message_info.get("user_info") if isinstance(message_info, dict) else None
+        if not isinstance(user_info, dict):
+            return None, None, f"消息 {normalized_msg_id} 缺少发送者信息"
+
+        user_id = str(user_info.get("user_id") or "").strip()
+        if not user_id:
+            return None, None, f"消息 {normalized_msg_id} 缺少发送者 ID"
+        display_name = (
+            str(user_info.get("user_cardname") or "").strip()
+            or str(user_info.get("user_nickname") or "").strip()
+            or user_id
+        )
+        return user_id, display_name, None
+
     async def _get_group_member_role(self, group_id: str, user_id: str) -> str:
         """查询目标在群内的角色。"""
 
@@ -307,10 +369,8 @@ class MutePlugin(MaiBotPlugin):
             user_id=str(user_id),
             no_cache=True,
         )
-        member_info = _extract_nested_capability_value(result, "result")
-        if isinstance(member_info, dict):
-            return str(member_info.get("role") or "").strip().lower()
-        return ""
+        member_info = _extract_nested_mapping(result)
+        return str(member_info.get("role") or "").strip().lower()
 
     async def _check_ban_target_constraints(
         self,
@@ -324,6 +384,8 @@ class MutePlugin(MaiBotPlugin):
         role = await self._get_group_member_role(group_id, user_id)
         if role == "owner":
             return f"{target_name} 是群主，不能被禁言"
+        if role == "admin":
+            return f"{target_name} 是管理员，不能被禁言"
         return None
 
     async def _send_group_ban(
@@ -382,17 +444,17 @@ class MutePlugin(MaiBotPlugin):
     @Tool(
         "mute",
         description=(
-            "在群聊中对指定人物执行禁言。\n"
+            "在群聊中根据消息 ID 对该消息发送者执行禁言。\n"
             "适用于刷屏、违规发言、用户主动要求被禁言等情况。\n"
             "当有人发送了不当内容或者辱骂他人时，可以对其禁言。\n"
-            "调用前应确认对象明确，且不要对管理员保护名单中的用户执行。"
+            "调用前应确认 msg_id 指向要处理的目标用户消息，且不要对管理员保护名单中的用户执行。"
         ),
         parameters={
             "type": "object",
             "properties": {
-                "target": {
+                "msg_id": {
                     "type": "string",
-                    "description": "要禁言的人物名称，优先使用 person_name",
+                    "description": "要禁言的目标用户所发送的消息 ID",
                 },
                 "duration": {
                     "type": "integer",
@@ -403,14 +465,14 @@ class MutePlugin(MaiBotPlugin):
                     "description": "禁言原因，可选",
                 },
             },
-            "required": ["target", "duration"],
+            "required": ["msg_id", "duration"],
         },
     )
     async def handle_mute_tool(
         self,
         stream_id: str = "",
         group_id: str = "",
-        target: str = "",
+        msg_id: str = "",
         duration: Any = None,
         reason: str = "",
         **kwargs: Any,
@@ -428,23 +490,26 @@ class MutePlugin(MaiBotPlugin):
         if not normalized_group_id:
             return False, "当前会话缺少群号"
 
-        normalized_target = str(target or "").strip()
-        if not normalized_target:
-            return False, "禁言目标不能为空"
+        normalized_msg_id = str(msg_id or "").strip()
+        if not normalized_msg_id:
+            return False, "缺少目标消息 ID"
 
         normalized_duration, duration_error = self._normalize_duration(duration)
         if normalized_duration is None:
             return False, duration_error or "禁言时长无效"
 
-        target_user_id, resolve_error = await self._resolve_person_user_id(normalized_target)
+        target_user_id, target_display_name, resolve_error = await self._resolve_message_sender(
+            stream_id,
+            normalized_msg_id,
+        )
         if not target_user_id:
             return False, resolve_error or self.config.mute.error_messages[5]
         if self._is_admin_user(target_user_id):
-            return False, f"用户 {normalized_target} 是管理员，无法被禁言"
+            return False, f"用户 {target_display_name} 是管理员，无法被禁言"
         constraint_error = await self._check_ban_target_constraints(
             group_id=normalized_group_id,
             user_id=target_user_id,
-            target_name=normalized_target,
+            target_name=target_display_name,
         )
         if constraint_error:
             return False, constraint_error
@@ -455,12 +520,12 @@ class MutePlugin(MaiBotPlugin):
             stream_id=stream_id,
             user_id=target_user_id,
             duration=normalized_duration,
-            target_name=normalized_target,
+            target_name=target_display_name,
             reason=normalized_reason,
         )
         if not success:
             return False, send_error or "执行禁言动作失败"
-        return True, f"成功禁言 {normalized_target}"
+        return True, f"成功禁言 {target_display_name}"
 
     @Command(
         "mute_command",
