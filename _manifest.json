@@ -1,20 +1,40 @@
 {
-  "manifest_version": 1,
+  "manifest_version": 2,
+  "version": "4.4.0",
   "name": "群聊禁言管理插件 (Mute Plugin)",
-  "version": "4.2.0",
-  "description": "群聊禁言管理插件，提供智能禁言功能",
+  "description": "群聊禁言管理插件，提供智能禁言和手动禁言命令",
   "author": {
     "name": "SengokuCola",
     "url": "https://github.com/SengokuCola"
   },
   "license": "MIT",
-  "host_application": {
-    "min_version": "0.10.3"
+  "urls": {
+    "repository": "https://github.com/SengokuCola/MutePlugin",
+    "homepage": "https://github.com/SengokuCola/MutePlugin",
+    "documentation": "https://github.com/Mai-with-u/maibot-plugin-sdk/blob/main/docs/guide.md",
+    "issues": "https://github.com/SengokuCola/MutePlugin/issues"
   },
-  "homepage_url": "https://github.com/SengokuCola",
-  "repository_url": "https://github.com/SengokuCola/MutePlugin",
-  "keywords": ["mute", "ban", "moderation", "admin", "management", "group"],
-  "categories": ["Moderation", "Group Management", "Admin Tools"],
-  "default_locale": "zh-CN",
-  "locales_path": "_locales"
+  "host_application": {
+    "min_version": "1.0.0",
+    "max_version": "1.0.0"
+  },
+  "sdk": {
+    "min_version": "2.0.0",
+    "max_version": "2.99.99"
+  },
+  "dependencies": [],
+  "capabilities": [
+    "api.call",
+    "person.get_id_by_name",
+    "person.get_value",
+    "send.text"
+  ],
+  "i18n": {
+    "default_locale": "zh-CN",
+    "locales_path": "_locales",
+    "supported_locales": [
+      "zh-CN"
+    ]
+  },
+  "id": "sengokucola.mute-plugin"
 }

@@ -9,7 +9,7 @@
 enabled = true
 
 # 配置文件版本
-config_version = "0.1.0"
+config_version = "4.5.0"
 
 
 # 组件启用控制
@@ -33,6 +33,7 @@ allowed_groups = []
 
 
 # 核心禁言功能配置
+admin_users = []
 [mute]
 
 # 最短禁言时长（秒）
@@ -50,25 +51,8 @@ enable_duration_formatting = true
 # 是否记录禁言历史（未来功能）
 log_mute_history = true
 
-# 成功禁言后发送的随机消息模板
-templates = ["好的，禁言 {target} {duration}，理由：{reason}", "收到，对 {target} 执行禁言 {duration}，因为{reason}", "明白了，禁言 {target} {duration}，原因是{reason}", "哇哈哈哈哈哈，已禁言 {target} {duration}，理由：{reason}", "哎呦我去，对 {target} 执行禁言 {duration}，因为{reason}", "{target}，你完蛋了，我要禁言你 {duration} 秒，原因：{reason}"]
-
 # 执行禁言过程中发生错误时发送的随机消息模板
 error_messages = ["没有指定禁言对象呢~", "没有指定禁言时长呢~", "禁言时长必须是正数哦~", "禁言时长必须是数字哦~", "找不到 {target} 这个人呢~", "查找用户信息时出现问题~"]
-
-
-# 智能禁言Action的专属配置
-[smart_mute]
-
-# 是否允许并行执行（暂未启用）
-allow_parallel = false
-
-
-# 禁言命令Command的专属配置
-[mute_command]
-
-# 命令冷却时间（秒）
-cooldown_seconds = 3
 
 
 # 日志记录相关配置
