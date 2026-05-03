@@ -11,7 +11,7 @@
   "urls": {
     "repository": "https://github.com/SengokuCola/MutePlugin",
     "homepage": "https://github.com/SengokuCola/MutePlugin",
-    "documentation": "https://github.com/Mai-with-u/maibot-plugin-sdk/blob/main/docs/guide.md",
+    "documentation": "https://github.com/SengokuCola/MutePlugin/blob/main/README.md",
     "issues": "https://github.com/SengokuCola/MutePlugin/issues"
   },
   "host_application": {
