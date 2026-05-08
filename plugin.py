@@ -7,6 +7,22 @@ from typing import Any, Dict, List, Optional, Tuple
 from maibot_sdk import Command, Field, MaiBotPlugin, PluginConfigBase, Tool
 
 
+_NAPCAT_GROUP_API_CANDIDATES: Dict[str, List[str]] = {
+    "get_group_member_info": [
+        "adapter.napcat.group.get_group_member_info",
+        "adapter.napcat.get_group_member_info",
+        "napcat.get_group_member_info",
+        "get_group_member_info",
+    ],
+    "set_group_ban": [
+        "adapter.napcat.group.set_group_ban",
+        "adapter.napcat.set_group_ban",
+        "napcat.set_group_ban",
+        "set_group_ban",
+    ],
+}
+
+
 def _matches_scoped_identifier(allowed_values: List[str], current_value: str) -> bool:
     """兼容 `platform:id` 与纯 ID 两种配置格式。"""
 
@@ -125,6 +141,29 @@ def _is_successful_api_result(payload: Any) -> bool:
             continue
         break
     return False
+
+
+def _is_api_not_found_error(payload: Any) -> bool:
+    """判断 API 调用失败是否属于目标 API 未注册/不可见。"""
+
+    error_message = _extract_api_error_message(payload)
+    return any(
+        marker in error_message
+        for marker in (
+            "未找到 API 提供方插件",
+            "未找到 API",
+            "未找到版本为",
+            "API 名称不唯一",
+            "禁止跨插件调用",
+        )
+    )
+
+
+def _is_adapter_unavailable_error(payload: Any) -> bool:
+    """判断适配器 API 是否因连接不可用而失败。"""
+
+    error_message = _extract_api_error_message(payload)
+    return any(marker in error_message for marker in ("WebSocket 尚未连接", "未连接", "not connected"))
 
 
 class PluginSectionConfig(PluginConfigBase):
@@ -365,12 +404,94 @@ class MutePlugin(MaiBotPlugin):
         )
         return user_id, display_name, None
 
+    async def _discover_napcat_group_api_name(self, action_name: str) -> Optional[str]:
+        """从当前可见 API 中发现 NapCat 群管理 API 的真实注册名。"""
+
+        try:
+            apis = await self.ctx.api.list()
+        except Exception as exc:
+            self.ctx.logger.debug("%s 获取 API 列表失败: %s", self._log_prefix(), exc)
+            return None
+        if not isinstance(apis, list):
+            return None
+
+        candidates: List[Dict[str, Any]] = []
+        for api_info in apis:
+            if not isinstance(api_info, dict):
+                continue
+            name = str(api_info.get("name") or "").strip()
+            full_name = str(api_info.get("full_name") or "").strip()
+            if name == action_name or name.endswith(f".{action_name}") or full_name.endswith(f".{action_name}"):
+                candidates.append(api_info)
+
+        if not candidates:
+            return None
+
+        def _candidate_score(api_info: Dict[str, Any]) -> Tuple[int, str]:
+            searchable_text = " ".join(
+                str(api_info.get(key) or "").lower()
+                for key in ("plugin_id", "name", "full_name", "description")
+            )
+            score = 0
+            if "snowluma" in searchable_text:
+                score -= 30
+            if "napcat" in searchable_text:
+                score -= 20
+            if "adapter" in searchable_text:
+                score -= 10
+            if str(api_info.get("version") or "") == "1":
+                score -= 5
+            return score, str(api_info.get("full_name") or api_info.get("name") or "")
+
+        candidates.sort(key=_candidate_score)
+        selected = candidates[0]
+        selected_name = str(selected.get("full_name") or selected.get("name") or "").strip()
+        if len(candidates) > 1:
+            self.ctx.logger.info(
+                "%s 发现多个 %s API，选择 %s，候选=%s",
+                self._log_prefix(),
+                action_name,
+                selected_name,
+                [str(item.get("full_name") or item.get("name") or "") for item in candidates],
+            )
+        return selected_name or None
+
+    async def _call_napcat_group_api(self, action_name: str, **kwargs: Any) -> Any:
+        """调用 NapCat 群管理 API，并兼容不同适配器插件的注册命名。"""
+
+        discovered_name = await self._discover_napcat_group_api_name(action_name)
+        api_names = []
+        if discovered_name:
+            api_names.append(discovered_name)
+        api_names.extend(_NAPCAT_GROUP_API_CANDIDATES.get(action_name, []))
+
+        last_result: Any = None
+        tried_names: List[str] = []
+        for api_name in dict.fromkeys(api_names):
+            tried_names.append(api_name)
+            result = await self.ctx.api.call(api_name, version="1", **kwargs)
+            last_result = result
+            if not (
+                isinstance(result, dict)
+                and result.get("success") is False
+                and (_is_api_not_found_error(result) or _is_adapter_unavailable_error(result))
+            ):
+                return result
+
+        self.ctx.logger.warning(
+            "%s 未找到可用的 NapCat 群管理 API: action=%s, tried=%s, last_result=%s",
+            self._log_prefix(),
+            action_name,
+            tried_names,
+            last_result,
+        )
+        return last_result
+
     async def _get_group_member_role(self, group_id: str, user_id: str) -> str:
         """查询目标在群内的角色。"""
 
-        result = await self.ctx.api.call(
-            "adapter.napcat.group.get_group_member_info",
-            version="1",
+        result = await self._call_napcat_group_api(
+            "get_group_member_info",
             group_id=str(group_id),
             user_id=str(user_id),
             no_cache=True,
@@ -415,14 +536,13 @@ class MutePlugin(MaiBotPlugin):
             await self.ctx.send.text("未能解析目标用户 ID，无法执行禁言", stream_id)
             return False, "未能解析目标用户 ID"
 
-        result = await self.ctx.api.call(
-            "adapter.napcat.group.set_group_ban",
-            version="1",
+        result = await self._call_napcat_group_api(
+            "set_group_ban",
             group_id=normalized_group_id,
             user_id=normalized_user_id,
             duration=duration,
         )
-        success = _is_successful_api_result(result)
+        success = result is None or _is_successful_api_result(result)
         if not success:
             error_message = _extract_api_error_message(result)
             self.ctx.logger.warning(
