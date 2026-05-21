@@ -82,6 +82,16 @@ def _extract_nested_mapping(payload: Any) -> Dict[str, Any]:
     return {}
 
 
+def _looks_like_message_payload(payload: Any) -> bool:
+    """判断数据是否已经是 SDK 解包后的消息字典。"""
+
+    return (
+        isinstance(payload, dict)
+        and isinstance(payload.get("message_info"), dict)
+        and str(payload.get("message_id") or "").strip() != ""
+    )
+
+
 def _normalize_platform_user_id(payload: Any) -> str:
     """从 capability 返回值中提取最终可用的平台用户 ID。"""
 
@@ -376,6 +386,8 @@ class MutePlugin(MaiBotPlugin):
             chat_id=normalized_stream_id,
         )
         if not isinstance(lookup_result, dict):
+            if lookup_result is None:
+                return None, None, f"未找到消息 ID 为 {normalized_msg_id} 的消息"
             raise RuntimeError("message.get_by_id 返回格式异常")
         capability_result = _extract_nested_mapping(lookup_result)
         if lookup_result.get("success") is False or capability_result.get("success") is False:
@@ -383,7 +395,11 @@ class MutePlugin(MaiBotPlugin):
                 capability_result.get("error") or lookup_result.get("error") or "message.get_by_id 查询失败"
             )
 
-        target_message = capability_result.get("message")
+        target_message = (
+            capability_result
+            if _looks_like_message_payload(capability_result)
+            else capability_result.get("message")
+        )
         if target_message is None:
             return None, None, f"未找到消息 ID 为 {normalized_msg_id} 的消息"
         if not isinstance(target_message, dict):
