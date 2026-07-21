@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "version": "4.6.0",
+  "version": "4.6.1",
   "name": "群聊禁言管理插件 (Mute Plugin)",
   "description": "群聊禁言管理插件，提供智能禁言和手动禁言命令",
   "author": {
@@ -16,10 +16,10 @@
   },
   "host_application": {
     "min_version": "1.0.0",
-    "max_version": "1.0.0"
+    "max_version": "1.1.99"
   },
   "sdk": {
-    "min_version": "2.0.0",
+    "min_version": "2.3.0",
     "max_version": "2.99.99"
   },
   "dependencies": [],
