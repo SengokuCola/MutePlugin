@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "version": "4.6.1",
+  "version": "4.7.0",
   "name": "群聊禁言管理插件 (Mute Plugin)",
   "description": "群聊禁言管理插件，提供智能禁言和手动禁言命令",
   "author": {
@@ -15,11 +15,11 @@
     "issues": "https://github.com/SengokuCola/MutePlugin/issues"
   },
   "host_application": {
-    "min_version": "1.0.0",
-    "max_version": "1.1.99"
+    "min_version": "1.2.0",
+    "max_version": "1.2.99"
   },
   "sdk": {
-    "min_version": "2.3.0",
+    "min_version": "2.8.0",
     "max_version": "2.99.99"
   },
   "dependencies": [],

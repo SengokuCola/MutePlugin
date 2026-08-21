@@ -184,7 +184,7 @@ class PluginSectionConfig(PluginConfigBase):
     __ui_order__ = 0
 
     enabled: bool = Field(default=True, description="是否启用插件")
-    config_version: str = Field(default="4.5.1", description="配置版本")
+    config_version: str = Field(default="4.7.0", description="配置版本")
 
 
 class ComponentsConfig(PluginConfigBase):
@@ -380,8 +380,9 @@ class MutePlugin(MaiBotPlugin):
         if not normalized_stream_id:
             return None, None, "缺少当前会话 stream_id，无法按消息 ID 查询目标"
 
-        lookup_result = await self.ctx.call_capability(
-            "message.get_by_id",
+        # SDK 2.8 已将能力代理的返回值解包为消息字典，直接使用代理接口，
+        # 不再依赖旧版 ``call_capability`` 的 RPC 包装结构。
+        lookup_result = await self.ctx.message.get_by_id(
             message_id=normalized_msg_id,
             chat_id=normalized_stream_id,
         )

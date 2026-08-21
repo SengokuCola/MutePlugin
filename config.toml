@@ -1,6 +1,6 @@
 # mute_plugin - 配置文件
 # 群聊禁言管理插件，提供智能禁言功能
-# 配置版本: 0.1.0
+# 配置版本: 4.7.0
 
 # 插件基本信息配置
 [plugin]
@@ -9,7 +9,7 @@
 enabled = true
 
 # 配置文件版本
-config_version = "4.5.1"
+config_version = "4.7.0"
 
 # 组件启用控制
 
